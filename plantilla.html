@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cartilla de Marcadores ZS — Llenado y Generación de Columna</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --azul: #0f3460;
+    --azul-hover: #164275;
+    --azul-claro: #f0f5fc;
+    --gris-borde: #dbe1e8;
+    --gris-fondo: #f8fafc;
+    --verde: #10b981;
+    --verde-hover: #059669;
+    --texto: #1e293b;
+    --texto-secundario: #64748b;
+    --sombra-suave: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    --sombra-bloque: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+  }
+
+  * { box-sizing: border-box; transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
+
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    margin: 0; padding: 0; background: var(--gris-fondo); color: var(--texto);
+    line-height: 1.5;
+  }
+
+  header {
+    background: linear-gradient(135deg, var(--azul) 0%, #1a1a2e 100%);
+    color: #fff; padding: 24px 32px;
+    box-shadow: var(--sombra-suave);
+  }
+  header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.025em; }
+  header p { margin: 6px 0 0; font-size: 14px; color: #cbd5e1; font-weight: 400; }
+
+  /* ---------- layout de dos columnas ---------- */
+  .layout { display: flex; gap: 24px; align-items: flex-start; max-width: 1600px; margin: 0 auto; padding: 24px 32px 40px; }
+  .principal { flex: 1; min-width: 0; }
+  .panel-lateral { width: 330px; flex-shrink: 0; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; padding-bottom: 8px; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; }
+    .panel-lateral { width: 100%; position: static; max-height: none; }
+  }
+
+  /* ---------- tabs ---------- */
+  .tabs { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+  .tab-btn {
+    padding: 10px 20px; border: 1px solid var(--gris-borde); background: #fff;
+    border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;
+    color: var(--texto-secundario); box-shadow: var(--sombra-suave);
+  }
+  .tab-btn:hover { background: var(--azul-claro); color: var(--azul); border-color: var(--azul); }
+  .tab-btn.activo { background: var(--azul); color: #fff; border-color: var(--azul); }
+
+  .panel-tipo { display: none; }
+  .panel-tipo.activo { display: block; }
+
+  .info-box {
+    background: #ffffff; border-left: 4px solid var(--azul); border-radius: 8px;
+    padding: 16px 20px; margin-bottom: 24px; font-size: 13.5px; line-height: 1.6;
+    box-shadow: var(--sombra-suave); color: var(--texto-secundario);
+  }
+  .info-box b { color: var(--azul); font-weight: 600; }
+
+  /* ---------- tarjeta de cartilla (encabezado con acciones) ---------- */
+  .cartilla-wrapper { margin-bottom: 26px; }
+  .cartilla-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .cartilla-titulo { font-size: 13px; font-weight: 700; color: var(--azul); text-transform: uppercase; letter-spacing: .05em; }
+  .cartilla-acciones { display: flex; gap: 8px; margin-left: auto; }
+
+  .chip-btn {
+    padding: 6px 14px; border-radius: 30px; border: 1px solid var(--gris-borde);
+    background: #fff; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--texto-secundario);
+  }
+  .chip-btn:hover { background: #f1f5f9; color: var(--texto); }
+  .chip-btn.on { background: var(--azul-claro); color: var(--azul); border-color: var(--azul); }
+  .chip-btn.quitar { color: #ef4444; border-color: #fee2e2; }
+  .chip-btn.quitar:hover { background: #fee2e2; }
+
+  /* ---------- visual "físico" de la tira de marcadores ---------- */
+  .cartilla-visual {
+    background: linear-gradient(180deg, #f1f3f5, #e2e6ea);
+    border-radius: 18px;
+    padding: 22px 40px 26px;
+    position: relative;
+    box-shadow: inset 0 1px 3px rgba(255,255,255,.9), inset 0 -1px 4px rgba(0,0,0,.05), var(--sombra-bloque);
+    overflow-x: auto;
+  }
+  .cartilla-visual .tapa { height: 15px; background: #fff; margin: 0 auto; box-shadow: 0 1px 3px rgba(0,0,0,.1); width: 42%; min-width: 160px; }
+  .cartilla-visual .tapa.arriba { border-radius: 0 0 12px 12px; margin-bottom: 16px; }
+  .cartilla-visual .tapa.abajo { border-radius: 12px 12px 0 0; margin-top: 16px; }
+
+  .cartilla-visual .perforaciones {
+    position: absolute; top: 24px; bottom: 24px; width: 9px; border-radius: 4px;
+    background-image: repeating-linear-gradient(180deg, #b8c2cc 0 4px, transparent 4px 15px);
+  }
+  .cartilla-visual .perforaciones.izq { left: 14px; }
+  .cartilla-visual .perforaciones.der { right: 14px; }
+
+  .cartilla-visual .etiqueta-lateral {
+    position: absolute; right: -8px; top: 50%; transform: translateY(-50%) rotate(90deg);
+    font-size: 11px; font-weight: 800; color: #94a3b8; letter-spacing: .12em;
+  }
+
+  .encabezado-posiciones, .tira-fila { display: flex; justify-content: center; gap: 4px; align-items: center; }
+  .encabezado-posiciones { margin-bottom: 10px; }
+  .encabezado-posiciones span { width: 38px; font-size: 10px; font-weight: 700; color: #64748b; text-align: center; }
+
+  .filas { display: flex; flex-direction: column; }
+  .tira-fila { padding-bottom: 7px; margin-bottom: 7px; border-bottom: 1.5px dashed #cbd5e1; }
+  .tira-fila:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+  /* CELDAS SIEMPRE VERTICALES FIJAS */
+  .celda-etiqueta {
+    width: 38px; height: 58px; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    flex-shrink: 0; overflow: hidden; position: relative;
+  }
+
+  /* INPUT INTERNO CON DOS MODOS DE DIRECCIÓN */
+  .celda-etiqueta input {
+    border: none; background: transparent; text-align: center;
+    font-size: 12px; font-weight: 700; color: #1e293b; padding: 0; font-family: inherit;
+    outline: none; position: absolute;
+  }
+
+  /* MODO HORIZONTAL (Por defecto): Texto centrado horizontalmente */
+  .cartilla-wrapper[data-orientacion="horizontal"] .celda-etiqueta input {
+    width: 100%; height: 100%;
+    left: 0; top: 0;
+  }
+
+  /* MODO VERTICAL: El texto se gira hacia la izquierda (-90deg) */
+  .cartilla-wrapper[data-orientacion="vertical"] .celda-etiqueta input {
+    writing-mode: horizontal-tb;
+    transform: rotate(-90deg);
+    width: 58px;   /* Toma el alto de la celda como ancho virtual */
+    height: 38px;  /* Toma el ancho de la celda como alto virtual */
+    white-space: nowrap;
+    left: calc(50% - 29px);
+    top: calc(50% - 19px);
+  }
+
+  .celda-etiqueta input:focus {
+    background: #fff;
+    box-shadow: inset 0 0 0 2px var(--azul);
+    border-radius: 4px;
+  }
+  .celda-etiqueta input:not(:placeholder-shown) { background: #e6fdf0; }
+  
+  /* aviso suave cuando el texto supera lo recomendado */
+  .celda-etiqueta input.aviso { background: #fffbeb; box-shadow: inset 0 0 0 2px #f59e0b; }
+  .celda-etiqueta input.aviso-fuerte { background: #fef2f2; box-shadow: inset 0 0 0 2px #ef4444; }
+
+  .gap-medio { width: 16px; flex-shrink: 0; }
+
+  /* ---------- agregar cartilla ---------- */
+  .agregar-cartilla {
+    width: 100%; padding: 14px; border: 2px dashed #cbd5e1; border-radius: 12px;
+    background: #fff; color: var(--azul); font-weight: 700; font-size: 14px; cursor: pointer;
+    margin-bottom: 24px; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .agregar-cartilla:hover { background: var(--azul-claro); border-color: var(--azul); border-style: solid; }
+
+  /* ---------- panel lateral ---------- */
+  .seccion-lateral { background: #fff; border: 1px solid var(--gris-borde); border-radius: 12px; margin-bottom: 14px; overflow: hidden; box-shadow: var(--sombra-suave); }
+  .seccion-lateral summary { padding: 14px 16px; font-weight: 700; font-size: 13.5px; color: var(--azul); cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; }
+  .seccion-lateral summary::-webkit-details-marker { display: none; }
+  .seccion-lateral summary::after { content: '▸'; margin-left: auto; color: #94a3b8; transition: transform .15s; }
+  .seccion-lateral[open] summary::after { transform: rotate(90deg); }
+  .seccion-contenido { padding: 0 16px 16px; }
+
+  .campo { margin-bottom: 14px; }
+  .campo label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 5px; color: var(--texto); }
+  .campo input[type=text], .campo input[type=number], .campo input[type=file], .campo select, .campo textarea {
+    width: 100%; padding: 9px 12px; border: 1px solid var(--gris-borde); border-radius: 7px; font-size: 13.5px;
+    background: #fff; color: var(--texto); font-family: inherit;
+    outline: none;
+  }
+  .campo input:focus, .campo select:focus, .campo textarea:focus {
+    border-color: var(--azul); box-shadow: 0 0 0 3px rgba(15, 52, 96, 0.15);
+  }
+  .campo textarea { height: 90px; font-family: ui-monospace, monospace; resize: vertical; }
+  .fila-campos { display: flex; gap: 10px; }
+  .fila-campos .campo { flex: 1; }
+
+  .modo-panel { display: none; }
+  .modo-panel.activo { display: block; }
+
+  .check-linea { display: flex; align-items: center; gap: 9px; font-size: 12.5px; margin-bottom: 14px; cursor: pointer; }
+  .check-linea input { width: 15px; height: 15px; accent-color: var(--azul); flex-shrink: 0; }
+
+  .btn-full { width: 100%; }
+  .ayuda-lateral { font-size: 11.5px; color: var(--texto-secundario); margin: 10px 0 0; line-height: 1.5; }
+
+  .grid-simbolos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .btn-simbolo { padding: 9px 4px; border: 1px solid var(--gris-borde); border-radius: 7px; background: #fff; font-size: 12.5px; font-weight: 700; cursor: pointer; color: var(--texto); }
+  .btn-simbolo:hover { background: var(--azul-claro); border-color: var(--azul); color: var(--azul); }
+
+  .vista-previa-lista { max-height: 140px; overflow-y: auto; font-family: ui-monospace, monospace; font-size: 12px; background: #f8fafc; border: 1px solid var(--gris-borde); border-radius: 8px; padding: 8px; }
+  .vista-previa-lista div { padding: 2px 0; border-bottom: 1px dashed #e2e8f0; }
+
+  /* ---------- botones genéricos ---------- */
+  .btn {
+    padding: 10px 20px; border-radius: 8px; border: 1px solid var(--gris-borde);
+    background: #fff; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--texto);
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    outline: none;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:focus-visible { box-shadow: 0 0 0 3px rgba(15, 52, 96, 0.3); }
+  .btn-primario { background: var(--verde); color: #fff; border-color: var(--verde); }
+  .btn-primario:hover { background: var(--verde-hover); border-color: var(--verde-hover); }
+  .btn-secundario { background: var(--azul); color: #fff; border-color: var(--azul); }
+  .btn-secundario:hover { background: var(--azul-hover); border-color: var(--azul-hover); }
+  .btn-peligro { color: #ef4444; border-color: #fee2e2; }
+  .btn-peligro:hover { background: #fee2e2; }
+
+  /* ---------- barra de acciones ---------- */
+  .barra-acciones {
+    position: sticky; bottom: 0; background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px); border-top: 1px solid var(--gris-borde);
+    padding: 16px 32px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+    box-shadow: 0 -4px 12px rgba(0,0,0,.08); z-index: 40;
+  }
+  .contador { margin-left: auto; font-size: 14px; color: var(--texto-secundario); font-weight: 500; }
+
+  /* ---------- resultados ---------- */
+  .resultado { max-width: 1600px; margin: 0 auto 40px; padding: 24px 32px 60px; }
+  .resultado h2 { font-size: 18px; font-weight: 700; color: var(--azul); margin-bottom: 16px; }
+  .resultado-cols { display: flex; gap: 24px; flex-wrap: wrap; }
+  .col-resultado { flex: 1; min-width: 320px; background: #fff; border: 1px solid var(--gris-borde); border-radius: 12px; padding: 20px; box-shadow: var(--sombra-bloque); }
+  .col-resultado h3 { margin: 0 0 12px; font-size: 14px; color: var(--azul); font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+
+  textarea.salida {
+    width: 100%; height: 280px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13px; border: 1px solid var(--gris-borde); border-radius: 8px; padding: 12px;
+    resize: vertical; background: #f8fafc; color: #334155; line-height: 1.6;
+    outline: none;
+  }
+  textarea.salida:focus { border-color: var(--azul); box-shadow: 0 0 0 3px rgba(15, 52, 96, 0.1); }
+
+  table.detalle { width: 100%; border-collapse: collapse; font-size: 13px; max-height: 280px; display: block; overflow: auto; }
+  table.detalle th, table.detalle td { border: 1px solid var(--gris-borde); padding: 8px 12px; text-align: left; }
+  table.detalle th { background: #f1f5f9; position: sticky; top: 0; font-weight: 600; color: var(--texto); }
+  table.detalle tr:hover { background: var(--azul-claro); }
+  .oculto { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Cartilla de Marcadores de Borneras — ZS</h1>
+  <p>Visualiza y llena tus cartillas de borneras como se ven en la impresora. Genera la columna lista para el programa de impresión.</p>
+</header>
+
+<div class="layout">
+  <div class="principal">
+    <div class="tabs" id="tabs"></div>
+    <div id="paneles"></div>
+  </div>
+
+  <aside class="panel-lateral">
+    <details class="seccion-lateral" open>
+      <summary>💼 Guardar / cargar plantilla</summary>
+      <div class="seccion-contenido">
+        <p class="ayuda-lateral" style="margin-top:0;">Guarda todo lo que llenaste (los 5 tipos, con su orientación) en un solo archivo para enviárselo a quien procesa tus datos. Esa persona lo carga aquí mismo y ve exactamente las mismas cartillas que armaste.</p>
+        <button type="button" class="btn btn-secundario btn-full" id="btnGuardarPlantilla">💾 Guardar plantilla completa</button>
+        <div class="campo" style="margin-top:14px;">
+          <label>Cargar plantilla (.json)</label>
+          <input type="file" id="archivoPlantilla" accept=".json">
+        </div>
+        <div class="campo" style="margin-top:16px; border-top:1px dashed var(--gris-borde); padding-top:14px;">
+          <label>Proporción letra / ancho de celda</label>
+          <input type="number" id="proporcionFuenteInput" value="0.4" min="0.1" max="1" step="0.05">
+          <p class="ayuda-lateral">Controla cuánto se achica la letra al escribir más texto del recomendado en cada tipo. Súbelo si en la práctica entra más texto del que se ve aquí; bájalo si se ve más grande de lo real.</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="seccion-lateral">
+      <summary>📥 Insertar / autonumerar datos</summary>
+      <div class="seccion-contenido">
+        <div class="campo">
+          <label>Modo</label>
+          <select id="modo">
+            <option value="numerico">Numérico secuencial (1, 2, 3…)</option>
+            <option value="alfabetico">Alfabético secuencial (A, B, C…)</option>
+            <option value="alfanumerico">Alfanumérico con prefijo/sufijo</option>
+            <option value="personalizado">Pegar mi propia lista</option>
+          </select>
+        </div>
+
+        <div class="modo-panel activo" data-modo="numerico">
+          <div class="campo"><label>Cantidad de valores</label><input type="number" id="numCantidad" value="20" min="1"></div>
+          <div class="fila-campos">
+            <div class="campo"><label>Inicio</label><input type="number" id="numInicio" value="1"></div>
+            <div class="campo"><label>Paso</label><input type="number" id="numPaso" value="1"></div>
+          </div>
+          <div class="campo"><label>Ceros a la izquierda (dígitos)</label><input type="number" id="numPad" value="0" min="0" max="6"></div>
+        </div>
+
+        <div class="modo-panel" data-modo="alfabetico">
+          <div class="campo"><label>Cantidad de valores</label><input type="number" id="alfaCantidad" value="20" min="1"></div>
+          <div class="campo"><label>Letra inicial</label><input type="text" id="alfaInicio" maxlength="2" value="A"></div>
+        </div>
+
+        <div class="modo-panel" data-modo="alfanumerico">
+          <div class="campo"><label>Cantidad de valores</label><input type="number" id="anCantidad" value="20" min="1"></div>
+          <div class="fila-campos">
+            <div class="campo"><label>Prefijo</label><input type="text" id="anPrefijo" value="PE-"></div>
+            <div class="campo"><label>Sufijo</label><input type="text" id="anSufijo" value=""></div>
+          </div>
+          <div class="fila-campos">
+            <div class="campo"><label>Inicio</label><input type="number" id="anInicio" value="1"></div>
+            <div class="campo"><label>Paso</label><input type="number" id="anPaso" value="1"></div>
+            <div class="campo"><label>Dígitos</label><input type="number" id="anPad" value="2" min="0" max="6"></div>
+          </div>
+        </div>
+
+        <div class="modo-panel" data-modo="personalizado">
+          <div class="campo">
+            <label>Pega tu lista (una por línea o separada por comas)</label>
+            <textarea id="listaPersonalizada" placeholder="L1&#10;L2&#10;L3&#10;..."></textarea>
+          </div>
+        </div>
+
+        <label class="check-linea" for="sobrescribirInsertar">
+          <input type="checkbox" id="sobrescribirInsertar">
+          <span>Sobrescribir todo (borra los datos actuales de esta hoja antes de insertar)</span>
+        </label>
+
+        <button type="button" class="btn btn-primario btn-full" id="btnInsertarDatos">Insertar en la cartilla</button>
+        <p class="ayuda-lateral">Si los valores superan el espacio disponible, se agregan cartillas nuevas automáticamente.</p>
+      </div>
+    </details>
+
+    <details class="seccion-lateral">
+      <summary>📊 Importar desde Excel</summary>
+      <div class="seccion-contenido">
+        <div class="campo">
+          <label>Archivo (.xlsx, .xls o .csv)</label>
+          <input type="file" id="archivoExcel" accept=".xlsx,.xls,.csv">
+        </div>
+        <div class="campo oculto" id="campoHojaExcel">
+          <label>Hoja</label>
+          <select id="hojaExcel"></select>
+        </div>
+        <div class="campo oculto" id="campoColumnaExcel">
+          <label>Columna con los rótulos</label>
+          <select id="columnaExcel"></select>
+        </div>
+        <label class="check-linea oculto" id="campoPrimeraFilaEncabezado" for="primeraFilaEncabezado">
+          <input type="checkbox" id="primeraFilaEncabezado" checked>
+          <span>La primera fila es encabezado (no se importa)</span>
+        </label>
+        <div class="campo oculto" id="vistaPreviaExcel">
+          <label>Vista previa</label>
+          <div class="vista-previa-lista" id="listaVistaPrevia"></div>
+        </div>
+        <button type="button" class="btn btn-primario btn-full oculto" id="btnInsertarExcel">Insertar valores importados</button>
+        <p class="ayuda-lateral" id="ayudaExcel">Sube un archivo para elegir la hoja y la columna con los rótulos.</p>
+      </div>
+    </details>
+
+    <details class="seccion-lateral">
+      <summary>⚡ Símbolos eléctricos</summary>
+      <div class="seccion-contenido">
+        <p class="ayuda-lateral" style="margin-top:0;">Haz clic en una celda de la cartilla y luego en un símbolo para insertarlo ahí.</p>
+        <div class="grid-simbolos" id="gridSimbolos"></div>
+      </div>
+    </details>
+  </aside>
+</div>
+
+<div class="barra-acciones">
+  <button class="btn btn-primario" id="btnGenerar">🚀 Generar columna</button>
+  <button class="btn btn-peligro" id="btnLimpiar">🧹 Limpiar esta hoja</button>
+  <span class="contador" id="contador"></span>
+</div>
+
+<div class="resultado oculto" id="resultado">
+  <h2>Columna generada — <span id="resTipo"></span></h2>
+  <div class="resultado-cols">
+    <div class="col-resultado">
+      <h3>Lista simple (copiar y pegar en el programa de impresión)</h3>
+      <textarea class="salida" id="salidaSimple" readonly></textarea>
+      <div style="margin-top:12px; display:flex; gap:8px;">
+        <button class="btn btn-secundario" id="btnCopiar">📋 Copiar al portapapeles</button>
+        <button class="btn" id="btnDescargarTxt">💾 Descargar .txt</button>
+      </div>
+    </div>
+    <div class="col-resultado">
+      <h3>Detalle de distribución</h3>
+      <table class="detalle" id="tablaDetalle"></table>
+      <div style="margin-top:12px; display:flex; gap:8px; align-items:center;">
+        <select id="formatoDetalle" style="padding:8px 10px; border:1px solid var(--gris-borde); border-radius:7px;">
+          <option value="csv">CSV</option>
+          <option value="xlsx">XLSX</option>
+        </select>
+        <button class="btn" id="btnDescargarDetalle">📊 Descargar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TIPOS = {
+  ZS5:  { titulo: 'ZS5 = BORNERAS DE 2.5 MM',              marca: 'Marcan 12 borneras', n: 12, anchoMM: 5  },
+  ZS6:  { titulo: 'ZS6 = BORNERAS DE 4 MM',                marca: 'Marcan 10 borneras', n: 10, anchoMM: 6  },
+  ZS8:  { titulo: 'ZS8 = BORNERAS DE 6 MM',                marca: 'Marcan 7 borneras',  n: 7,  anchoMM: 8  },
+  ZS10: { titulo: 'ZS10 = BORNERAS DE 10 MM, 16MM, 35MM',  marca: 'Marcan 6 borneras',  n: 6,  anchoMM: 10 },
+  ZS12: { titulo: 'ZS12 = BORNERAS DE 12 MM',              marca: 'Marcan 5 borneras',  n: 5,  anchoMM: 12 },
+};
+const FILAS_POR_CARTILLA = 8;
+const SIMBOLOS = ['L1','L2','L3','N','PE','⏚','GND','+','−','~','DC','AC','Ø','Ω','°','→','←','↑','↓','⚠','⚡','φ','A','V'];
+
+const ALTO_MM = 10;              
+const RELACION_ANCHO_CARACTER = 0.6; 
+const MARGEN_IMPRESION = 0.9;    
+const BASE_FONT_PX = 12;         
+let PROPORCION_FUENTE = 0.4;     
+
+let tipoActivo = 'ZS5';
+let ultimaCeldaEnfocada = null;
+let workbookActual = null;
+
+const contadorCartilla = {};
+Object.keys(TIPOS).forEach(k => (contadorCartilla[k] = 0));
+
+function construirUI() {
+  const tabs = document.getElementById('tabs');
+  const paneles = document.getElementById('paneles');
+
+  Object.keys(TIPOS).forEach((key, idx) => {
+    const cfg = TIPOS[key];
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tab-btn' + (idx === 0 ? ' activo' : '');
+    btn.textContent = key;
+    btn.onclick = () => cambiarTab(key);
+    tabs.appendChild(btn);
+
+    const panel = document.createElement('div');
+    panel.className = 'panel-tipo' + (idx === 0 ? ' activo' : '');
+    panel.id = 'panel-' + key;
+
+    const info = document.createElement('div');
+    info.className = 'info-box';
+    info.innerHTML = `<b>${cfg.titulo}</b> — ${cfg.marca}. Celda de ${cfg.anchoMM}mm de ancho × ${ALTO_MM}mm de alto.<br>
+      La numeración de cada tira (1 a ${cfg.n}) ya está pensada para salir correcta en la impresora.
+      Cada cartilla tiene 8 filas; si los datos que insertas superan una cartilla, se agregan más automáticamente.
+      La letra de cada celda se achica sola si escribes más texto del recomendado para el tamaño físico — no hay un límite fijo, tú decides.`;
+    panel.appendChild(info);
+
+    const cartillasCont = document.createElement('div');
+    cartillasCont.className = 'cartillas-cont';
+    cartillasCont.id = 'cartillas-' + key;
+    panel.appendChild(cartillasCont);
+
+    const btnAgregar = document.createElement('button');
+    btnAgregar.type = 'button';
+    btnAgregar.className = 'agregar-cartilla';
+    btnAgregar.innerHTML = '<span>➕</span> Agregar cartilla manualmente';
+    btnAgregar.onclick = () => agregarCartilla(key);
+    panel.appendChild(btnAgregar);
+
+    paneles.appendChild(panel);
+    agregarCartilla(key);
+  });
+
+  construirSimbolos();
+  actualizarContador();
+}
+
+function agregarCartilla(tipoKey) {
+  const cfg = TIPOS[tipoKey];
+  const cont = document.getElementById('cartillas-' + tipoKey);
+  contadorCartilla[tipoKey] += 1;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'cartilla-wrapper';
+  wrapper.setAttribute('data-orientacion', 'horizontal');
+
+  // encabezado con acciones
+  const headerDiv = document.createElement('div');
+  headerDiv.className = 'cartilla-header';
+  const titulo = document.createElement('span');
+  titulo.className = 'cartilla-titulo';
+  titulo.textContent = 'Cartilla';
+  headerDiv.appendChild(titulo);
+
+  const acciones = document.createElement('div');
+  acciones.className = 'cartilla-acciones';
+
+  const btnOrient = document.createElement('button');
+  btnOrient.type = 'button';
+  btnOrient.className = 'chip-btn on';
+  btnOrient.textContent = '↔ Horizontal';
+  btnOrient.onclick = () => alternarOrientacion(wrapper, btnOrient);
+  acciones.appendChild(btnOrient);
+
+  const btnQuitar = document.createElement('button');
+  btnQuitar.type = 'button';
+  btnQuitar.className = 'chip-btn quitar';
+  btnQuitar.textContent = '✕ Quitar';
+  btnQuitar.onclick = () => quitarCartilla(tipoKey, wrapper);
+  acciones.appendChild(btnQuitar);
+
+  headerDiv.appendChild(acciones);
+  wrapper.appendChild(headerDiv);
+
+  // tarjeta visual
+  const visual = document.createElement('div');
+  visual.className = 'cartilla-visual';
+
+  const tapaArriba = document.createElement('div');
+  tapaArriba.className = 'tapa arriba';
+  visual.appendChild(tapaArriba);
+
+  const perfIzq = document.createElement('div');
+  perfIzq.className = 'perforaciones izq';
+  visual.appendChild(perfIzq);
+  const perfDer = document.createElement('div');
+  perfDer.className = 'perforaciones der';
+  visual.appendChild(perfDer);
+
+  const gapAfter = Math.ceil(cfg.n / 2);
+
+  const encabezado = document.createElement('div');
+  encabezado.className = 'encabezado-posiciones';
+  for (let p = 1; p <= cfg.n; p++) {
+    const span = document.createElement('span');
+    span.textContent = p;
+    encabezado.appendChild(span);
+    if (p === gapAfter && p !== cfg.n) {
+      const gap = document.createElement('span');
+      gap.className = 'gap-medio';
+      encabezado.appendChild(gap);
+    }
+  }
+  visual.appendChild(encabezado);
+
+  const filasCont = document.createElement('div');
+  filasCont.className = 'filas';
+  for (let f = 1; f <= FILAS_POR_CARTILLA; f++) {
+    const filaDiv = document.createElement('div');
+    filaDiv.className = 'tira-fila';
+    for (let p = 1; p <= cfg.n; p++) {
+      const celda = document.createElement('div');
+      celda.className = 'celda-etiqueta';
+      const input = document.createElement('input');
+      input.setAttribute('data-fila', f);
+      input.setAttribute('data-pos', p);
+      input.placeholder = "—";
+      input.maxLength = 24;
+      celda.appendChild(input);
+      filaDiv.appendChild(celda);
+      if (p === gapAfter && p !== cfg.n) {
+        const gap = document.createElement('div');
+        gap.className = 'gap-medio';
+        filaDiv.appendChild(gap);
+      }
+    }
+    filasCont.appendChild(filaDiv);
+  }
+  visual.appendChild(filasCont);
+
+  const etiquetaLateral = document.createElement('span');
+  etiquetaLateral.className = 'etiqueta-lateral';
+  etiquetaLateral.textContent = tipoKey;
+  visual.appendChild(etiquetaLateral);
+
+  const tapaAbajo = document.createElement('div');
+  tapaAbajo.className = 'tapa abajo';
+  visual.appendChild(tapaAbajo);
+
+  wrapper.appendChild(visual);
+  cont.appendChild(wrapper);
+  renumerarCartillas(tipoKey);
+  actualizarContador();
+  return wrapper;
+}
+
+function quitarCartilla(tipoKey, wrapper) {
+  const cont = document.getElementById('cartillas-' + tipoKey);
+  if (cont.children.length <= 1) {
+    alert('Cada tipo debe tener al menos una cartilla.');
+    return;
+  }
+  if (!confirm('¿Quitar esta cartilla? Se perderán los datos que tenga.')) return;
+  wrapper.remove();
+  renumerarCartillas(tipoKey);
+  actualizarContador();
+  document.getElementById('resultado').classList.add('oculto');
+}
+
+function renumerarCartillas(tipoKey) {
+  const cont = document.getElementById('cartillas-' + tipoKey);
+  Array.from(cont.children).forEach((wrapper, i) => {
+    wrapper.querySelector('.cartilla-titulo').textContent = 'Cartilla ' + (i + 1);
+  });
+}
+
+function alternarOrientacion(wrapper, btn) {
+  const visual = wrapper.querySelector('.cartilla-visual');
+  // En lugar de rotar las celdas físicamente, solo cambiamos el estado de orientación del wrapper
+  const vertical = wrapper.getAttribute('data-orientacion') === 'vertical';
+  const nuevaOrientacion = vertical ? 'horizontal' : 'vertical';
+  
+  wrapper.setAttribute('data-orientacion', nuevaOrientacion);
+  btn.textContent = nuevaOrientacion === 'vertical' ? '↕ Vertical' : '↔ Horizontal';
+  wrapper.querySelectorAll('input').forEach(ajustarTamanoFuente);
+}
+
+function obtenerTipoDeCelda(inputEl) {
+  const panel = inputEl.closest('.panel-tipo');
+  return panel ? panel.id.replace('panel-', '') : tipoActivo;
+}
+
+function ajustarTamanoFuente(inputEl) {
+  const tipoKey = obtenerTipoDeCelda(inputEl);
+  const cfg = TIPOS[tipoKey];
+  if (!cfg) return;
+
+  const wrapper = inputEl.closest('.cartilla-wrapper');
+  const orientacion = wrapper ? wrapper.getAttribute('data-orientacion') : 'horizontal';
+
+  // Dimensiones físicas de la celda de la cartilla
+  const ANCHO_CELDA_PX = 38;
+  const ALTO_CELDA_PX = 58;
+
+  // Si está vertical, el espacio disponible de escritura es el ALTO de la celda.
+  // Si está horizontal, el espacio disponible es el ANCHO de la celda.
+  const espacioDisponiblePX = orientacion === 'vertical' ? ALTO_CELDA_PX : ANCHO_CELDA_PX;
+  
+  const len = inputEl.value.trim().length;
+  const anchoCaracterEstimado = BASE_FONT_PX * RELACION_ANCHO_CARACTER;
+  const caracteresRecomendados = Math.max(1, Math.floor((espacioDisponiblePX * MARGEN_IMPRESION) / anchoCaracterEstimado));
+
+  const factor = len > caracteresRecomendados ? Math.max(0.45, caracteresRecomendados / len) : 1;
+
+  inputEl.style.fontSize = factor >= 0.999 ? '' : (BASE_FONT_PX * factor).toFixed(1) + 'px';
+  inputEl.classList.toggle('aviso', factor < 1 && factor >= 0.65);
+  inputEl.classList.toggle('aviso-fuerte', factor < 0.65);
+}
+
+function recalcularTodasLasFuentes() {
+  document.querySelectorAll('.panel-tipo input').forEach(ajustarTamanoFuente);
+}
+
+function cambiarTab(key) {
+  tipoActivo = key;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('activo', b.textContent === key));
+  document.querySelectorAll('.panel-tipo').forEach(p => p.classList.toggle('activo', p.id === 'panel-' + key));
+  document.getElementById('resultado').classList.add('oculto');
+  actualizarContador();
+}
+
+function cartillasDelTipoActivo() {
+  return Array.from(document.querySelectorAll(`#cartillas-${tipoActivo} .cartilla-wrapper`));
+}
+
+function celdasEnOrden() {
+  return Array.from(document.querySelectorAll(`#cartillas-${tipoActivo} input`));
+}
+
+function actualizarContador() {
+  const inputs = celdasEnOrden();
+  const llenos = inputs.filter(i => i.value.trim() !== '').length;
+  document.getElementById('contador').textContent = `⚡ ${llenos} de ${inputs.length} celdas ocupadas en ${tipoActivo}`;
+}
+
+function insertarDatosEnFlujo(valores, sobrescribirTodo) {
+  const valoresLimpios = valores.map(v => (v === undefined || v === null) ? '' : String(v).trim()).filter(v => v !== '');
+  if (!valoresLimpios.length) {
+    alert('No hay valores para insertar.');
+    return;
+  }
+
+  if (sobrescribirTodo) {
+    celdasEnOrden().forEach(i => (i.value = ''));
+  }
+
+  let cola = celdasEnOrden().filter(i => i.value.trim() === '');
+  let idx = 0;
+
+  valoresLimpios.forEach(valor => {
+    if (idx >= cola.length) {
+      const nuevaCartilla = agregarCartilla(tipoActivo);
+      cola = cola.concat(Array.from(nuevaCartilla.querySelectorAll('input')));
+    }
+    cola[idx].value = valor;
+    ajustarTamanoFuente(cola[idx]);
+    idx++;
+  });
+
+  actualizarContador();
+}
+
+function generarColumna() {
+  const cartillas = cartillasDelTipoActivo();
+  const detalle = [];
+  cartillas.forEach((wrapper, ci) => {
+    const orientacion = wrapper.getAttribute('data-orientacion');
+    wrapper.querySelectorAll('input').forEach(i => {
+      detalle.push({
+        cartilla: ci + 1,
+        orientacion,
+        fila: i.getAttribute('data-fila'),
+        pos: i.getAttribute('data-pos'),
+        valor: i.value.trim(),
+      });
+    });
+  });
+
+  const soloLlenos = detalle.filter(d => d.valor !== '');
+
+  document.getElementById('resTipo').textContent = tipoActivo;
+  document.getElementById('salidaSimple').value = soloLlenos.map(d => d.valor).join('\n');
+
+  const tabla = document.getElementById('tablaDetalle');
+  tabla.innerHTML = '';
+  const trHead = document.createElement('tr');
+  ['Cartilla', 'Orientación', 'Fila', 'Posición', 'Valor'].forEach(h => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    trHead.appendChild(th);
+  });
+  tabla.appendChild(trHead);
+  detalle.forEach(d => {
+    const tr = document.createElement('tr');
+    [d.cartilla, d.orientacion, d.fila, d.pos, d.valor].forEach(v => {
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.appendChild(td);
+    });
+    tabla.appendChild(tr);
+  });
+
+  window.__ultimoDetalle = detalle;
+  document.getElementById('resultado').classList.remove('oculto');
+  document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function limpiarHoja() {
+  if (!confirm(`¿Borrar todos los datos llenados en ${tipoActivo}?`)) return;
+  celdasEnOrden().forEach(i => (i.value = ''));
+  actualizarContador();
+  document.getElementById('resultado').classList.add('oculto');
+}
+
+function descargarTexto(nombre, contenido, tipoMime) {
+  const blob = new Blob([contenido], { type: tipoMime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function csvEscape(v) {
+  const s = String(v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function descargarXlsxDesdeAoA(nombre, aoa, hoja) {
+  if (typeof XLSX === 'undefined') {
+    alert('No se pudo cargar la librería de Excel. Prueba descargando en CSV.');
+    return;
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, hoja || 'Datos');
+  XLSX.writeFile(wb, nombre);
+}
+
+function exportarPlantillaCompleta() {
+  const datos = { version: 1, generado: new Date().toISOString(), proporcionFuente: PROPORCION_FUENTE, tipos: {} };
+
+  Object.keys(TIPOS).forEach(key => {
+    const wrappers = Array.from(document.querySelectorAll(`#cartillas-${key} .cartilla-wrapper`));
+    datos.tipos[key] = {
+      cartillas: wrappers.map(wrapper => ({
+        orientacion: wrapper.getAttribute('data-orientacion'),
+        celdas: Array.from(wrapper.querySelectorAll('input'))
+          .filter(i => i.value.trim() !== '')
+          .map(i => ({ fila: i.getAttribute('data-fila'), pos: i.getAttribute('data-pos'), valor: i.value })),
+      })),
+    };
+  });
+
+  const nombre = `cartilla_ZS_plantilla_${new Date().toISOString().slice(0, 10)}.json`;
+  descargarTexto(nombre, JSON.stringify(datos, null, 2), 'application/json');
+}
+
+function importarPlantillaCompleta(json) {
+  if (!json || typeof json !== 'object' || !json.tipos) {
+    alert('El archivo no tiene el formato esperado.');
+    return;
+  }
+  if (!confirm('Esto va a reemplazar todo lo que tienes llenado en todos los tipos. ¿Continuar?')) return;
+
+  Object.keys(TIPOS).forEach(key => {
+    const cont = document.getElementById('cartillas-' + key);
+    cont.innerHTML = '';
+    contadorCartilla[key] = 0;
+
+    const guardado = json.tipos[key];
+    const listaCartillas = (guardado && Array.isArray(guardado.cartillas) && guardado.cartillas.length)
+      ? guardado.cartillas
+      : [{ orientacion: 'horizontal', celdas: [] }];
+
+    listaCartillas.forEach(datosCartilla => {
+      const wrapper = agregarCartilla(key);
+      if (datosCartilla.orientacion === 'vertical') {
+        const btn = wrapper.querySelector('.chip-btn:not(.quitar)');
+        alternarOrientacion(wrapper, btn);
+      }
+      (datosCartilla.celdas || []).forEach(c => {
+        const input = wrapper.querySelector(`input[data-fila="${c.fila}"][data-pos="${c.pos}"]`);
+        if (input) {
+          input.value = c.valor || '';
+          ajustarTamanoFuente(input);
+        }
+      });
+    });
+  });
+
+  if (typeof json.proporcionFuente === 'number' && json.proporcionFuente > 0) {
+    PROPORCION_FUENTE = json.proporcionFuente;
+    const campo = document.getElementById('proporcionFuenteInput');
+    if (campo) campo.value = PROPORCION_FUENTE;
+  }
+
+  cambiarTab(Object.keys(TIPOS)[0]);
+  actualizarContador();
+  document.getElementById('resultado').classList.add('oculto');
+  alert('Plantilla cargada correctamente.');
+}
+
+function letraSecuencial(indiceCero) {
+  let n = indiceCero;
+  let s = '';
+  do {
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return s;
+}
+
+function indiceDeLetra(letras) {
+  let n = 0;
+  const s = letras.toUpperCase().replace(/[^A-Z]/g, '');
+  for (let i = 0; i < s.length; i++) {
+    n = n * 26 + (s.charCodeAt(i) - 64);
+  }
+  return n - 1;
+}
+
+function generarSecuencia(modo, cantidad) {
+  const out = [];
+  if (modo === 'numerico') {
+    const inicio = parseInt(document.getElementById('numInicio').value || '1', 10);
+    const paso = parseInt(document.getElementById('numPaso').value || '1', 10);
+    const pad = parseInt(document.getElementById('numPad').value || '0', 10);
+    for (let i = 0; i < cantidad; i++) {
+      let v = String(inicio + i * paso);
+      if (pad > 0) v = v.padStart(pad, '0');
+      out.push(v);
+    }
+  } else if (modo === 'alfabetico') {
+    const letraInicio = (document.getElementById('alfaInicio').value || 'A').trim();
+    const idxInicio = indiceDeLetra(letraInicio);
+    for (let i = 0; i < cantidad; i++) out.push(letraSecuencial(idxInicio + i));
+  } else if (modo === 'alfanumerico') {
+    const prefijo = document.getElementById('anPrefijo').value || '';
+    const sufijo = document.getElementById('anSufijo').value || '';
+    const inicio = parseInt(document.getElementById('anInicio').value || '1', 10);
+    const paso = parseInt(document.getElementById('anPaso').value || '1', 10);
+    const pad = parseInt(document.getElementById('anPad').value || '2', 10);
+    for (let i = 0; i < cantidad; i++) {
+      let num = String(inicio + i * paso);
+      if (pad > 0) num = num.padStart(pad, '0');
+      out.push(prefijo + num + sufijo);
+    }
+  }
+  return out;
+}
+
+function construirSimbolos() {
+  const cont = document.getElementById('gridSimbolos');
+  SIMBOLOS.forEach(sym => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn-simbolo';
+    b.textContent = sym;
+    b.onclick = () => insertarSimbolo(sym);
+    cont.appendChild(b);
+  });
+}
+
+function insertarSimbolo(sym) {
+  if (ultimaCeldaEnfocada && document.body.contains(ultimaCeldaEnfocada) && ultimaCeldaEnfocada.closest(`#cartillas-${tipoActivo}`)) {
+    const el = ultimaCeldaEnfocada;
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    el.value = el.value.slice(0, start) + sym + el.value.slice(end);
+    const pos = start + sym.length;
+    el.focus();
+    el.setSelectionRange(pos, pos);
+    ajustarTamanoFuente(el);
+    actualizarContador();
+  } else {
+    insertarDatosEnFlujo([sym], false);
+  }
+}
+
+function obtenerFilasHojaActual() {
+  const nombreHoja = document.getElementById('hojaExcel').value;
+  const hoja = workbookActual.Sheets[nombreHoja];
+  return XLSX.utils.sheet_to_json(hoja, { header: 1, defval: '' });
+}
+
+function cargarColumnasDeHoja() {
+  const filas = obtenerFilasHojaActual();
+  const numCols = filas.reduce((max, f) => Math.max(max, f.length), 0);
+  const selCol = document.getElementById('columnaExcel');
+  selCol.innerHTML = '';
+  for (let c = 0; c < numCols; c++) {
+    const encabezado = filas[0] ? filas[0][c] : '';
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = `Columna ${letraSecuencial(c)}` + (encabezado ? ` — "${encabezado}"` : '');
+    selCol.appendChild(opt);
+  }
+  document.getElementById('campoColumnaExcel').classList.remove('oculto');
+  document.getElementById('campoPrimeraFilaEncabezado').classList.remove('oculto');
+  document.getElementById('btnInsertarExcel').classList.remove('oculto');
+  actualizarVistaPreviaExcel();
+}
+
+function valoresColumnaExcel() {
+  const filas = obtenerFilasHojaActual();
+  const col = parseInt(document.getElementById('columnaExcel').value, 10);
+  const saltarEncabezado = document.getElementById('primeraFilaEncabezado').checked;
+  const inicio = saltarEncabezado ? 1 : 0;
+  const valores = [];
+  for (let r = inicio; r < filas.length; r++) {
+    const v = filas[r][col];
+    if (v !== undefined && v !== null && String(v).trim() !== '') valores.push(String(v).trim());
+  }
+  return valores;
+}
+
+function escaparHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function actualizarVistaPreviaExcel() {
+  const valores = valoresColumnaExcel();
+  const cont = document.getElementById('listaVistaPrevia');
+  cont.innerHTML = valores.slice(0, 12).map(v => `<div>${escaparHtml(v)}</div>`).join('') +
+    (valores.length > 12 ? `<div>… y ${valores.length - 12} más</div>` : '');
+  document.getElementById('vistaPreviaExcel').classList.remove('oculto');
+  document.getElementById('ayudaExcel').textContent = `${valores.length} valores detectados en esta columna.`;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  construirUI();
+
+  document.getElementById('paneles').addEventListener('input', (e) => {
+    if (e.target.tagName === 'INPUT') {
+      ajustarTamanoFuente(e.target);
+      actualizarContador();
+    }
+  });
+  document.getElementById('paneles').addEventListener('focusin', (e) => {
+    if (e.target.tagName === 'INPUT') ultimaCeldaEnfocada = e.target;
+  });
+
+  document.getElementById('btnGenerar').onclick = generarColumna;
+  document.getElementById('btnLimpiar').onclick = limpiarHoja;
+
+  document.getElementById('btnGuardarPlantilla').onclick = exportarPlantillaCompleta;
+  document.getElementById('archivoPlantilla').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const texto = await file.text();
+      const json = JSON.parse(texto);
+      importarPlantillaCompleta(json);
+    } catch (err) {
+      alert('No se pudo leer el archivo. Verifica que sea un .json generado por esta misma herramienta.');
+    }
+    e.target.value = '';
+  });
+  document.getElementById('proporcionFuenteInput').addEventListener('input', (e) => {
+    const v = parseFloat(e.target.value);
+    if (!isNaN(v) && v > 0) {
+      PROPORCION_FUENTE = v;
+      recalcularTodasLasFuentes();
+    }
+  });
+
+  document.getElementById('modo').addEventListener('change', (e) => {
+    document.querySelectorAll('.modo-panel').forEach(p => p.classList.toggle('activo', p.getAttribute('data-modo') === e.target.value));
+  });
+
+  document.getElementById('btnInsertarDatos').onclick = () => {
+    const modo = document.getElementById('modo').value;
+    let valores;
+    if (modo === 'personalizado') {
+      const texto = document.getElementById('listaPersonalizada').value || '';
+      valores = texto.split(/[\n,]/).map(v => v.trim()).filter(v => v !== '');
+    } else {
+      let cantidad = 0;
+      if (modo === 'numerico') cantidad = parseInt(document.getElementById('numCantidad').value || '0', 10);
+      if (modo === 'alfabetico') cantidad = parseInt(document.getElementById('alfaCantidad').value || '0', 10);
+      if (modo === 'alfanumerico') cantidad = parseInt(document.getElementById('anCantidad').value || '0', 10);
+      valores = generarSecuencia(modo, cantidad);
+    }
+    insertarDatosEnFlujo(valores, document.getElementById('sobrescribirInsertar').checked);
+  };
+
+  document.getElementById('archivoExcel').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (typeof XLSX === 'undefined') {
+      alert('No se pudo cargar la librería de Excel. Puedes usar "Insertar / autonumerar datos" > "Pegar mi propia lista" como alternativa.');
+      return;
+    }
+    const buf = await file.arrayBuffer();
+    workbookActual = XLSX.read(buf, { type: 'array' });
+    const selHoja = document.getElementById('hojaExcel');
+    selHoja.innerHTML = '';
+    workbookActual.SheetNames.forEach(n => {
+      const o = document.createElement('option');
+      o.value = n;
+      o.textContent = n;
+      selHoja.appendChild(o);
+    });
+    document.getElementById('campoHojaExcel').classList.remove('oculto');
+    cargarColumnasDeHoja();
+  });
+  document.getElementById('hojaExcel').addEventListener('change', cargarColumnasDeHoja);
+  document.getElementById('columnaExcel').addEventListener('change', actualizarVistaPreviaExcel);
+  document.getElementById('primeraFilaEncabezado').addEventListener('change', actualizarVistaPreviaExcel);
+  document.getElementById('btnInsertarExcel').onclick = () => {
+    const valores = valoresColumnaExcel();
+    insertarDatosEnFlujo(valores, document.getElementById('sobrescribirInsertar').checked);
+  };
+
+  document.getElementById('btnCopiar').onclick = () => {
+    const ta = document.getElementById('salidaSimple');
+    ta.select();
+    navigator.clipboard.writeText(ta.value).then(() => {
+      const btn = document.getElementById('btnCopiar');
+      const original = btn.textContent;
+      btn.textContent = '¡Copiado! 👍';
+      setTimeout(() => (btn.textContent = original), 1500);
+    }).catch(() => {
+      document.execCommand('copy');
+    });
+  };
+
+  document.getElementById('btnDescargarTxt').onclick = () => {
+    descargarTexto(`${tipoActivo}_columna.txt`, document.getElementById('salidaSimple').value, 'text/plain');
+  };
+
+  document.getElementById('btnDescargarDetalle').onclick = () => {
+    const formato = document.getElementById('formatoDetalle').value;
+    const detalle = window.__ultimoDetalle || [];
+    const filas = [['Hoja', 'Cartilla', 'Orientacion', 'Fila', 'Posicion', 'Valor']];
+    detalle.forEach(d => filas.push([tipoActivo, d.cartilla, d.orientacion, d.fila, d.pos, d.valor]));
+    if (formato === 'csv') {
+      const csv = filas.map(f => f.map(csvEscape).join(',')).join('\n');
+      descargarTexto(`${tipoActivo}_detallado.csv`, csv, 'text/csv');
+    } else {
+      descargarXlsxDesdeAoA(`${tipoActivo}_detallado.xlsx`, filas, 'Detalle');
+    }
+  };
+});
+</script>
+</body>
+</html>
